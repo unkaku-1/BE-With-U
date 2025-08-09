@@ -1,0 +1,163 @@
+# BEwithU .gitignore
+
+# 环境变量和配置
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# 日志文件
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# 依赖目录
+node_modules/
+jspm_packages/
+
+# 构建输出
+dist/
+build/
+.next/
+out/
+
+# 缓存目录
+.cache/
+.parcel-cache/
+.npm
+.eslintcache
+.stylelintcache
+
+# 运行时数据
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# 覆盖率目录
+coverage/
+*.lcov
+.nyc_output
+
+# 测试
+.coverage
+.jest
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS生成的文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+.dockerignore
+
+# 临时文件
+tmp/
+temp/
+*.tmp
+*.temp
+
+# 上传文件
+uploads/
+public/uploads/
+
+# 数据库文件
+*.sqlite
+*.sqlite3
+*.db
+
+# 备份文件
+*.backup
+*.bak
+
+# 压缩文件
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# 密钥和证书
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# n8n相关
+n8n/credentials/*.json
+n8n/workflows/*.json
+
+# Ollama模型文件（太大）
+docker/ollama/models/
+
+# 数据卷（Docker）
+postgres_data/
+redis_data/
+ollama_data/
+n8n_data/
+outline_data/
+zammad_data/
+elasticsearch_data/
+
+# 本地开发
+.local
+.cache
+
+# TypeScript
+*.tsbuildinfo
+
+# ESLint
+.eslintcache
+
+# Prettier
+.prettierignore
+
+# Yarn
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
+# 测试报告
+test-results/
+playwright-report/
+test-results.xml
+
+# Storybook
+storybook-static/
+
+# 文档生成
+docs/build/
+
+# 性能监控
+.clinic/
+
+# 安全扫描
+.snyk
+
+# 本地配置
+config/local.json
+config/development.json
+config/production.json
+
