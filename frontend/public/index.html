@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0ea5e9" />
+  <meta name="description" content="BEwithU - 智能IT支持系统，集成本地LLM、知识库和工单管理" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://bewithU.local/" />
+  <meta property="og:title" content="BEwithU - 智能IT支持系统" />
+  <meta property="og:description" content="集成本地LLM、知识库和工单管理的智能IT支持解决方案" />
+  <meta property="og:image" content="%PUBLIC_URL%/og-image.png" />
+
+  <!-- Twitter -->
+  <meta property="twitter:card" content="summary_large_image" />
+  <meta property="twitter:url" content="https://bewithU.local/" />
+  <meta property="twitter:title" content="BEwithU - 智能IT支持系统" />
+  <meta property="twitter:description" content="集成本地LLM、知识库和工单管理的智能IT支持解决方案" />
+  <meta property="twitter:image" content="%PUBLIC_URL%/og-image.png" />
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- Favicon -->
+  <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png" />
+  <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
+  
+  <!-- Preload critical resources -->
+  <link rel="preload" href="/api/health" as="fetch" crossorigin="anonymous">
+  
+  <title>BEwithU - 智能IT支持系统</title>
+  
+  <style>
+    /* Critical CSS for initial load */
+    body {
+      margin: 0;
+      font-family: 'Noto Sans JP', 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+        'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      background-color: #0f172a;
+      color: #f1f5f9;
+    }
+    
+    /* Loading spinner */
+    .loading-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+    }
+    
+    .loading-spinner {
+      width: 50px;
+      height: 50px;
+      border: 3px solid #334155;
+      border-top: 3px solid #0ea5e9;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    
+    .loading-text {
+      margin-top: 20px;
+      color: #64748b;
+      font-size: 14px;
+      text-align: center;
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* Hide loading when React loads */
+    #root:not(:empty) + .loading-container {
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <noscript>
+    <div style="text-align: center; padding: 50px; background: #0f172a; color: #f1f5f9;">
+      <h1>JavaScript が必要です</h1>
+      <p>BEwithU を使用するには JavaScript を有効にしてください。</p>
+      <p>You need to enable JavaScript to run this app.</p>
+    </div>
+  </noscript>
+  
+  <!-- React App Root -->
+  <div id="root"></div>
+  
+  <!-- Loading fallback -->
+  <div class="loading-container">
+    <div>
+      <div class="loading-spinner"></div>
+      <div class="loading-text">
+        <div>BEwithU を読み込み中...</div>
+        <div style="font-size: 12px; margin-top: 5px;">Loading BEwithU...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service Worker Registration -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('%PUBLIC_URL%/sw.js')
+          .then(function(registration) {
+            console.log('SW registered: ', registration);
+          })
+          .catch(function(registrationError) {
+            console.log('SW registration failed: ', registrationError);
+          });
+      });
+    }
+  </script>
+</body>
+</html>
+
