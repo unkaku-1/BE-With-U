@@ -1,252 +1,224 @@
 version: '3.8'
 
 services:
-  # PostgreSQL数据库
+  # PostgreSQL Database
   postgres:
-    image: postgres:15
+    image: postgres:15-alpine
     container_name: bewithU-postgres
     environment:
       POSTGRES_DB: bewithU
       POSTGRES_USER: bewithU_user
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bewithU_password}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bewithU_secure_2024}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     networks:
       - bewithU-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bewithU_user -d bewithU"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Redis缓存
+  # Redis Cache
   redis:
     image: redis:7-alpine
     container_name: bewithU-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secure_2024}
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
       - bewithU-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Ollama本地LLM服务
+  # Ollama Local LLM Service
   ollama:
     image: ollama/ollama:latest
     container_name: bewithU-ollama
     ports:
-      - "11434:11434"
+      - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_data:/root/.ollama
       - ./docker/ollama/entrypoint.sh:/entrypoint.sh
     environment:
       - OLLAMA_ORIGINS=*
+      - OLLAMA_HOST=0.0.0.0
     networks:
       - bewithU-network
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    entrypoint: ["/entrypoint.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 120s
 
-  # n8n工作流编排引擎
+  # BEwithU Backend API
+  bewithU_api:
+    build:
+      context: ./bewithU_api
+      dockerfile: Dockerfile
+    container_name: bewithU-api
+    ports:
+      - "${API_PORT:-5000}:5000"
+    environment:
+      - FLASK_ENV=${FLASK_ENV:-production}
+      - DATABASE_URL=postgresql://bewithU_user:${POSTGRES_PASSWORD:-bewithU_secure_2024}@postgres:5432/bewithU
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-redis_secure_2024}@redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET:-jwt_secret_change_me_2024}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - N8N_WEBHOOK_URL=http://n8n:5678
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000,http://localhost:5678}
+    volumes:
+      - ./bewithU_api:/app
+      - api_logs:/app/logs
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - bewithU-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # n8n Workflow Automation
   n8n:
     image: n8nio/n8n:latest
     container_name: bewithU-n8n
     ports:
-      - "5678:5678"
+      - "${N8N_PORT:-5678}:5678"
     environment:
       - DB_TYPE=postgresdb
       - DB_POSTGRESDB_HOST=postgres
       - DB_POSTGRESDB_PORT=5432
       - DB_POSTGRESDB_DATABASE=n8n
       - DB_POSTGRESDB_USER=bewithU_user
-      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-bewithU_password}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-bewithU_secure_2024}
       - N8N_BASIC_AUTH_ACTIVE=true
       - N8N_BASIC_AUTH_USER=${N8N_USER:-admin}
-      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-bewithU123}
-      - WEBHOOK_URL=http://localhost:5678/
+      - N8N_BASIC_AUTH_PASSWORD=${N8N_PASSWORD:-n8n_admin_2024}
+      - WEBHOOK_URL=http://localhost:${N8N_PORT:-5678}/
       - GENERIC_TIMEZONE=Asia/Tokyo
+      - N8N_SECURE_COOKIE=false
+      - N8N_HOST=0.0.0.0
+      - N8N_PROTOCOL=http
+      - N8N_LOG_LEVEL=info
+      - EXECUTIONS_PROCESS=main
+      - EXECUTIONS_DATA_SAVE_ON_ERROR=all
+      - EXECUTIONS_DATA_SAVE_ON_SUCCESS=all
     volumes:
       - n8n_data:/home/node/.n8n
-      - ./n8n/workflows:/home/node/.n8n/workflows
-      - ./n8n/credentials:/home/node/.n8n/credentials
+      - ./n8n/workflows:/tmp/workflows
+      - ./n8n/credentials:/tmp/credentials
     depends_on:
-      - postgres
-      - redis
-      - ollama
+      postgres:
+        condition: service_healthy
+      bewithU_api:
+        condition: service_healthy
     networks:
       - bewithU-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5678/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Outline知识库系统
-  outline:
-    image: outlinewiki/outline:latest
-    container_name: bewithU-outline
-    ports:
-      - "3001:3000"
-    environment:
-      - NODE_ENV=production
-      - SECRET_KEY=${OUTLINE_SECRET_KEY:-outline-secret-key-change-me}
-      - UTILS_SECRET=${OUTLINE_UTILS_SECRET:-outline-utils-secret-change-me}
-      - DATABASE_URL=postgres://bewithU_user:${POSTGRES_PASSWORD:-bewithU_password}@postgres:5432/outline
-      - REDIS_URL=redis://redis:6379
-      - URL=http://localhost:3001
-      - PORT=3000
-      - FILE_STORAGE=local
-      - FILE_STORAGE_LOCAL_ROOT_DIR=/var/lib/outline/data
-      - FILE_STORAGE_UPLOAD_MAX_SIZE=26214400
-      - ENABLE_UPDATES=false
-      - DEFAULT_LANGUAGE=ja_JP
-    volumes:
-      - outline_data:/var/lib/outline/data
-    depends_on:
-      - postgres
-      - redis
-    networks:
-      - bewithU-network
-    restart: unless-stopped
-
-  # Zammad工单系统
-  zammad-elasticsearch:
-    image: bitnami/elasticsearch:8
-    container_name: bewithU-zammad-elasticsearch
-    environment:
-      - discovery.type=single-node
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    volumes:
-      - elasticsearch_data:/bitnami/elasticsearch/data
-    networks:
-      - bewithU-network
-    restart: unless-stopped
-
-  zammad-init:
-    image: zammad/zammad-docker-compose:zammad-postgresql
-    container_name: bewithU-zammad-init
-    command: ["rails", "r", "Setting.set('es_url', 'http://zammad-elasticsearch:9200')"]
-    depends_on:
-      - postgres
-      - zammad-elasticsearch
-    environment:
-      - POSTGRESQL_HOST=postgres
-      - POSTGRESQL_PORT=5432
-      - POSTGRESQL_USER=bewithU_user
-      - POSTGRESQL_PASS=${POSTGRES_PASSWORD:-bewithU_password}
-      - POSTGRESQL_DB=zammad
-      - ELASTICSEARCH_HOST=zammad-elasticsearch
-      - ELASTICSEARCH_PORT=9200
-    networks:
-      - bewithU-network
-    restart: "no"
-
-  zammad-web:
-    image: zammad/zammad-docker-compose:zammad-postgresql
-    container_name: bewithU-zammad-web
-    ports:
-      - "3002:3000"
-    environment:
-      - POSTGRESQL_HOST=postgres
-      - POSTGRESQL_PORT=5432
-      - POSTGRESQL_USER=bewithU_user
-      - POSTGRESQL_PASS=${POSTGRES_PASSWORD:-bewithU_password}
-      - POSTGRESQL_DB=zammad
-      - ELASTICSEARCH_HOST=zammad-elasticsearch
-      - ELASTICSEARCH_PORT=9200
-      - RAILS_TRUSTED_PROXIES=['127.0.0.1', '::1']
-    volumes:
-      - zammad_data:/opt/zammad
-    depends_on:
-      - postgres
-      - zammad-elasticsearch
-      - zammad-init
-    networks:
-      - bewithU-network
-    restart: unless-stopped
-
-  # 后端API服务
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: bewithU-backend
-    ports:
-      - "8000:8000"
-    environment:
-      - NODE_ENV=production
-      - DATABASE_URL=postgres://bewithU_user:${POSTGRES_PASSWORD:-bewithU_password}@postgres:5432/bewithU
-      - REDIS_URL=redis://redis:6379
-      - JWT_SECRET=${JWT_SECRET:-jwt-secret-change-me}
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - N8N_WEBHOOK_URL=http://n8n:5678
-      - OUTLINE_API_URL=http://outline:3000
-      - ZAMMAD_API_URL=http://zammad-web:3000
-    volumes:
-      - ./backend:/app
-      - /app/node_modules
-    depends_on:
-      - postgres
-      - redis
-      - n8n
-      - ollama
-    networks:
-      - bewithU-network
-    restart: unless-stopped
-
-  # 前端应用
+  # Frontend Application
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: bewithU-frontend
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      - REACT_APP_API_URL=http://localhost:8000
-      - REACT_APP_N8N_URL=http://localhost:5678
-      - REACT_APP_OUTLINE_URL=http://localhost:3001
-      - REACT_APP_ZAMMAD_URL=http://localhost:3002
+      - REACT_APP_API_URL=http://localhost:${API_PORT:-5000}
+      - REACT_APP_N8N_URL=http://localhost:${N8N_PORT:-5678}
+      - REACT_APP_APP_NAME=BEwithU
+      - REACT_APP_VERSION=${APP_VERSION:-1.0.0}
+      - GENERATE_SOURCEMAP=false
     volumes:
-      - ./frontend:/app
-      - /app/node_modules
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
     depends_on:
-      - backend
+      bewithU_api:
+        condition: service_healthy
     networks:
       - bewithU-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Nginx反向代理
+  # Nginx Reverse Proxy (Optional)
   nginx:
     image: nginx:alpine
     container_name: bewithU-nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
     volumes:
-      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf
-      - ./docker/nginx/ssl:/etc/nginx/ssl
+      - ./docker/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/nginx/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
     depends_on:
-      - frontend
-      - backend
-      - n8n
-      - outline
-      - zammad-web
+      frontend:
+        condition: service_healthy
+      bewithU_api:
+        condition: service_healthy
+      n8n:
+        condition: service_healthy
     networks:
       - bewithU-network
     restart: unless-stopped
+    profiles:
+      - production
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   postgres_data:
+    driver: local
   redis_data:
+    driver: local
   ollama_data:
+    driver: local
   n8n_data:
-  outline_data:
-  zammad_data:
-  elasticsearch_data:
+    driver: local
+  api_logs:
+    driver: local
+  nginx_logs:
+    driver: local
 
 networks:
   bewithU-network:
     driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
 

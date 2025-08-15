@@ -1,0 +1,154 @@
+version: '3.8'
+
+# Development environment configuration
+# This is a simplified setup for development and testing
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: bewithU-postgres-dev
+    environment:
+      POSTGRES_DB: bewithU_dev
+      POSTGRES_USER: dev_user
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
+    ports:
+      - "5433:5432"
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: bewithU-redis-dev
+    command: redis-server --appendonly yes
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_dev_data:/data
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+
+  # Ollama Local LLM Service
+  ollama:
+    image: ollama/ollama:latest
+    container_name: bewithU-ollama-dev
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_dev_data:/root/.ollama
+      - ./docker/ollama/entrypoint.sh:/entrypoint.sh
+    environment:
+      - OLLAMA_ORIGINS=*
+      - OLLAMA_HOST=0.0.0.0
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+    entrypoint: ["/entrypoint.sh"]
+
+  # BEwithU Backend API (Development)
+  bewithU_api:
+    build:
+      context: ./bewithU_api
+      dockerfile: Dockerfile.dev
+    container_name: bewithU-api-dev
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=development
+      - FLASK_DEBUG=1
+      - DATABASE_URL=postgresql://dev_user:dev_password@postgres:5432/bewithU_dev
+      - REDIS_URL=redis://redis:6379/0
+      - JWT_SECRET_KEY=dev_jwt_secret
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - CORS_ORIGINS=http://localhost:3001,http://localhost:5679
+    volumes:
+      - ./bewithU_api:/app
+      - /app/venv
+    depends_on:
+      - postgres
+      - redis
+      - ollama
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+    command: ["python", "src/main.py"]
+
+  # n8n Workflow Automation (Development)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: bewithU-n8n-dev
+    ports:
+      - "5679:5678"
+    environment:
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n_dev
+      - DB_POSTGRESDB_USER=dev_user
+      - DB_POSTGRESDB_PASSWORD=dev_password
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=admin123
+      - WEBHOOK_URL=http://localhost:5679/
+      - GENERIC_TIMEZONE=Asia/Tokyo
+      - N8N_SECURE_COOKIE=false
+      - N8N_HOST=0.0.0.0
+      - N8N_PROTOCOL=http
+      - N8N_LOG_LEVEL=debug
+      - EXECUTIONS_PROCESS=main
+    volumes:
+      - n8n_dev_data:/home/node/.n8n
+      - ./n8n/workflows:/tmp/workflows
+    depends_on:
+      - postgres
+      - bewithU_api
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+
+  # Frontend Application (Development)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: bewithU-frontend-dev
+    ports:
+      - "3001:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:5001
+      - REACT_APP_N8N_URL=http://localhost:5679
+      - REACT_APP_APP_NAME=BEwithU (Dev)
+      - CHOKIDAR_USEPOLLING=true
+      - FAST_REFRESH=true
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - /app/node_modules
+    depends_on:
+      - bewithU_api
+    networks:
+      - bewithU-dev-network
+    restart: unless-stopped
+    command: ["npm", "start"]
+
+volumes:
+  postgres_dev_data:
+    driver: local
+  redis_dev_data:
+    driver: local
+  ollama_dev_data:
+    driver: local
+  n8n_dev_data:
+    driver: local
+
+networks:
+  bewithU-dev-network:
+    driver: bridge
+
